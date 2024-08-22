@@ -1,4 +1,5 @@
 import os
+import time
 import random
 import base64
 import hashlib
@@ -9,6 +10,7 @@ import threading
 ## CONFIG:
 ip = "127.0.0.1"
 port = 8763 + random.randint(0, 10)
+node_clock_speed = 1.0/10.0
 
 ## RUNTIME:
 
@@ -20,12 +22,12 @@ client_threads = [] # Threads for the connected clients
 resources = {}
 
 # This will hold all the game objects, called nodes
-nodes = []
+nodes = {}
 total_nodes = 0 # total amount of nodes ever made
 
 
 class Node:
-    def __init__(self, x, y, z, texture, setup_script, tick_script):
+    def __init__(self, x, y, z, texture, setup_script, tick_script, nid=None):
         global total_nodes
         # In our simplified system there will only be image nodes
         # at least for now
@@ -38,14 +40,17 @@ class Node:
         self.tick_script = tick_script
 
         # Assign a unique node ID and then increment
-        self.node_id = total_nodes
-        total_nodes += 1
+        if nid is None:
+            self.node_id = total_nodes
+            total_nodes += 1
+        else:
+            self.node_id = nid
 
         # We'll actually only run the init script the first time the
         # object is ticked, not when we create the object itself
         self.setup_script_has_run = False
 
-    def on_tick(self):
+    def on_tick(self, dt):
         if not self.setup_script_has_run:
             if not self.setup_script is None:
                 exec(self.setup_script)
@@ -104,23 +109,41 @@ def handle_user_command(client, addr, command):
         client.send("<HEARTBEAT>\\".encode())
         return
 
-    elif command.startswith("<NEW_NODE>"):
-        c = command[len("<NEW_NODE>"):]
-        x, y, z, text, b64a, b64b = c.split(" ")
+    # Just update a node's position
+    elif command.startswith("<TRAN>"):
+        c = command[len("<TRAN>"):]
+        i, x, y, z = c.split(" ")
+        i, x, y, z = int(i), float(x), float(y), float(z)
+        nodes[i].x = x
+        nodes[i].y = y
+        nodes[i].z = z
+
+    elif command.startswith("<NODE>"):
+        c = command[len("<NODE>"):]
+        # Chop up the packet
+        nid, x, y, z, text, b64a, b64b = c.split(" ")
         x, y, z = float(x), float(y), float(z)
+        nid = int(nid)
+        nid = None if nid == -1 else nid # -1 flag for new node
         scripta = base64.b64decode(b64a).decode("utf8")
         scriptb = base64.b64decode(b64b).decode("utf8")
-        new_node = Node(x, y, z, text, scripta, scriptb)
-        nodes.append(new_node)
+
+        # Make it into a new node
+        new_node = Node(x, y, z, text, scripta, scriptb, nid=nid)
+
+        # Store that node in the nodes dictionary
+        nodes[new_node.node_id] = new_node
+
+        # Send it back to the creator so he can update his own list
         client.send(("<NEW_NODE>{}\\".format(new_node.node_id)+"\\").encode())
         print(new_node)
         return
 
+    # SEND ALL THE NODES FUCK YOU FUCK YOU FUCK YOU
     elif command.startswith("<SEND_NODES>"):
-        for node in nodes:
-            client.send(node.serialize().encode())
+        for nid in nodes:
+            client.send(nodes[nid].serialize().encode())
         return
-        
         
 
 # Mostly just say hi!
@@ -147,9 +170,30 @@ def handle_socket_connection(client, addr):
         handle_user_command(client, addr, packet)
 
 
+# Just call on_tick on every node every howeveroften
+def tick_nodes():
+    start_time = time.time()
+    while 1:
+        # Waste CPU cycles while we wait for the tick speed
+        while time.time() - start_time < node_clock_speed:
+            time.sleep(node_clock_speed/10.0)
+
+        # Tick all the nodes with dt, we'll just do it in this thread
+        # for now
+        for nid in nodes:
+            nodes[nid].on_tick(time.time() - start_time)
+
+        # Then update the starting time for the next dt
+        start_time = time.time()
+
+
 if __name__ == "__main__":
     # Load in the resources from the resources folder
     load_resources("./resources")
+
+    # Then start going through the threads and updating them
+    tick_thread = threading.Thread(target=tick_nodes, args=())
+    tick_thread.start()
 
     # Bind the server to the port and let the admin know
     socket_server.bind((ip, port))
