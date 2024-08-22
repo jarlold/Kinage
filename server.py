@@ -95,7 +95,17 @@ def check_resource_exists(resource_name):
 
 def handle_user_command(client, addr, command):
     command = command.strip()
-    if command.startswith("<SEND_RESOURCE>"):
+    if command.startswith("<SEND_RESOURCES>"):
+        print("SENDING RESOURCES")
+        p = ""
+        for i in resources:
+            print("SENDING " + str(i))
+            p += "<RESOURCE>" + resources[i].decode("utf8")
+        p += "\\"
+        client.send(p.encode())
+        return
+
+    elif command.startswith("<SEND_RESOURCE>"):
         c = command[len("<SEND_RESOURCE>"):]
         print(c)
         if check_resource_exists(c):
@@ -104,6 +114,7 @@ def handle_user_command(client, addr, command):
         else:
             client.send("<ERROR>404\\".encode())
         return
+            
 
     elif command.startswith("<HEARTBEAT>"):
         client.send("<HEARTBEAT>\\".encode())
@@ -149,7 +160,7 @@ def handle_user_command(client, addr, command):
 # Mostly just say hi!
 def handle_socket_connection(client, addr):
     # Let the client know what's up
-    client.send("<HEARTBEAT>".encode())
+    #client.send("<HEARTBEAT>\\".encode())
     while 1:
         # String parsing? Slow? Never
         packet = ""
