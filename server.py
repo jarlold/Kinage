@@ -1,0 +1,178 @@
+import os
+import random
+import base64
+import hashlib
+import socket
+
+import threading
+
+## CONFIG:
+ip = "127.0.0.1"
+port = 8763 + random.randint(0, 10)
+
+## RUNTIME:
+
+# Actual TCP socket that we will communicate with the clients on
+socket_server = socket.socket()
+client_threads = [] # Threads for the connected clients
+
+# This will hold filename -> base64encoded file contents
+resources = {}
+
+# This will hold all the game objects, called nodes
+nodes = []
+total_nodes = 0 # total amount of nodes ever made
+
+
+class Node:
+    def __init__(self, x, y, z, texture, setup_script, tick_script):
+        global total_nodes
+        # In our simplified system there will only be image nodes
+        # at least for now
+        self.x, self.y, self.z = x, y, z
+        self.texture = texture
+
+        # They will however have scripts for when they are created
+        # and when they are ticked.
+        self.setup_script = setup_script
+        self.tick_script = tick_script
+
+        # Assign a unique node ID and then increment
+        self.node_id = total_nodes
+        total_nodes += 1
+
+        # We'll actually only run the init script the first time the
+        # object is ticked, not when we create the object itself
+        self.setup_script_has_run = False
+
+    def on_tick(self):
+        if not self.setup_script_has_run:
+            if not self.setup_script is None:
+                exec(self.setup_script)
+            self.setup_script_has_run = True
+        else:
+            if not self.tick_script is None:
+                exec(self.tick_script)
+
+    def serialize(self):
+        return "<NODE>{} {} {} {} {}".format(
+            self.node_id, self.x, self.y, self.z, self.texture
+        )
+
+    def __str__(self):
+        return "<NODE>\n\t{} {} {}\n\t{}\n\t{}\n</NODE".format(
+            self.x, self.y, self.z, self.setup_script, self.tick_script
+        )
+
+
+# Load the resources into a big dictionary of base64 encoded gunk
+def load_resources(path):
+    files = os.listdir(path)
+    for f in files:
+        # Images only
+        if not f.split(".")[-1] in ["png", "gif", "jpg"]: continue
+        # Read the whole image
+        d = open(path+"/"+f, 'rb').read()
+        resources[f] = base64.b64encode(d)
+
+
+# See if resource is registered in the resources dictionary, if it
+# is, send the resource as Bas64 because fuck you
+# also try catch is faster here because python is fucked up and fuck
+# you fuck you fuck you
+def check_resource_exists(resource_name):
+    try:
+        a = resources[resource_name]
+        return True
+    except KeyError as e:
+        return False
+
+
+def handle_user_command(client, addr, command):
+    command = command.strip()
+    if command.startswith("<SEND_RESOURCE>"):
+        c = command[len("<SEND_RESOURCE>"):]
+        print(c)
+        if check_resource_exists(c):
+            p = "<RESOURCE>"+resources[c].decode("utf8")+"\\"
+            client.send(p.encode())
+        else:
+            client.send("<ERROR>404\\".encode())
+        return
+
+    elif command.startswith("<HEARTBEAT>"):
+        client.send("<HEARTBEAT>\\".encode())
+        return
+
+    elif command.startswith("<NEW_NODE>"):
+        c = command[len("<NEW_NODE>"):]
+        x, y, z, text, b64a, b64b = c.split(" ")
+        x, y, z = float(x), float(y), float(z)
+        scripta = base64.b64decode(b64a).decode("utf8")
+        scriptb = base64.b64decode(b64b).decode("utf8")
+        new_node = Node(x, y, z, text, scripta, scriptb)
+        nodes.append(new_node)
+        client.send(("<NEW_NODE>{}\\".format(new_node.node_id)+"\\").encode())
+        print(new_node)
+        return
+
+    elif command.startswith("<SEND_NODES>"):
+        for node in nodes:
+            client.send(node.serialize().encode())
+        return
+        
+        
+
+# Mostly just say hi!
+def handle_socket_connection(client, addr):
+    # Let the client know what's up
+    client.send("<HEARTBEAT>".encode())
+    while 1:
+        # String parsing? Slow? Never
+        packet = ""
+        while 1:
+            d = client.recv(1)
+            if d == b"\\":
+                break
+            elif d == b'\xff':
+                print(addr, "disconnected.")
+                return
+            else:
+                packet += d.decode("utf8")
+
+        # Print his crap
+        print(packet)
+
+        # Then actually handle it I guess
+        handle_user_command(client, addr, packet)
+
+
+if __name__ == "__main__":
+    # Load in the resources from the resources folder
+    load_resources("./resources")
+
+    # Bind the server to the port and let the admin know
+    socket_server.bind((ip, port))
+    socket_server.listen(5)
+    print("Server is listening on {}:{}".format(ip, port))
+    
+    # Then start handling every client that connects
+    while 1:
+        a, b = socket_server.accept()
+        client_threads.append(
+            threading.Thread(target=handle_socket_connection, args=(a, b))
+        )
+        client_threads[-1].start()
+
+
+
+
+
+
+
+
+
+
+
+
+
