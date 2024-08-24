@@ -65,8 +65,8 @@ class Node:
         )
 
     def __str__(self):
-        return "<NODE>\n\t{} {} {}\n\t{}\n\t{}\n</NODE".format(
-            self.x, self.y, self.z, self.setup_script, self.tick_script
+        return "<NODE>\n\t{}\n\t{} {} {}\n\t{}\n\t{}\n</NODE".format(
+            self.texture, self.x, self.y, self.z, self.setup_script, self.tick_script
         )
 
 
@@ -78,7 +78,8 @@ def load_resources(path):
         if not f.split(".")[-1] in ["png", "gif", "jpg"]: continue
         # Read the whole image
         d = open(path+"/"+f, 'rb').read()
-        resources[f] = base64.b64encode(d)
+        na = hashlib.sha256(d).hexdigest()
+        resources[na] = base64.b64encode(d)
 
 
 # See if resource is registered in the resources dictionary, if it
@@ -96,18 +97,16 @@ def check_resource_exists(resource_name):
 def handle_user_command(client, addr, command):
     command = command.strip()
     if command.startswith("<SEND_RESOURCES>"):
-        print("SENDING RESOURCES")
         p = ""
         for i in resources:
-            print("SENDING " + str(i))
             p += "<RESOURCE>" + resources[i].decode("utf8")
+            p += ' '
         p += "\\"
         client.send(p.encode())
         return
 
     elif command.startswith("<SEND_RESOURCE>"):
         c = command[len("<SEND_RESOURCE>"):]
-        print(c)
         if check_resource_exists(c):
             p = "<RESOURCE>"+resources[c].decode("utf8")+"\\"
             client.send(p.encode())
@@ -136,8 +135,16 @@ def handle_user_command(client, addr, command):
         x, y, z = float(x), float(y), float(z)
         nid = int(nid)
         nid = None if nid == -1 else nid # -1 flag for new node
-        scripta = base64.b64decode(b64a).decode("utf8")
-        scriptb = base64.b64decode(b64b).decode("utf8")
+
+        if b64a == b"None":
+            scripta = None
+        else:
+            scripta = base64.b64decode(b64a).decode("utf8")
+
+        if b64b == b"None":
+            scriptb = None
+        else:
+            scriptb = base64.b64decode(b64b).decode("utf8")
 
         # Make it into a new node
         new_node = Node(x, y, z, text, scripta, scriptb, nid=nid)
@@ -146,14 +153,15 @@ def handle_user_command(client, addr, command):
         nodes[new_node.node_id] = new_node
 
         # Send it back to the creator so he can update his own list
-        client.send(("<NEW_NODE>{}\\".format(new_node.node_id)+"\\").encode())
-        print(new_node)
+        #client.send(("<NEW_NODE>{}\\".format(new_node.node_id)+"\\").encode())
+        client.send((new_node.serialize()+"\\").encode())
         return
 
     # SEND ALL THE NODES FUCK YOU FUCK YOU FUCK YOU
     elif command.startswith("<SEND_NODES>"):
         for nid in nodes:
             client.send(nodes[nid].serialize().encode())
+        client.send("\\".encode())
         return
         
 
@@ -175,10 +183,13 @@ def handle_socket_connection(client, addr):
                 packet += d.decode("utf8")
 
         # Print his crap
-        print(packet)
+        #print(packet)
 
         # Then actually handle it I guess
-        handle_user_command(client, addr, packet)
+        try:
+            handle_user_command(client, addr, packet)
+        except Exception as e:
+            print(e)
 
 
 # Just call on_tick on every node every howeveroften
