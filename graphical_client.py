@@ -11,16 +11,12 @@ import magic
 import simplified_client
 
 # Pylget state variables
-window = pyglet.window.Window(width=800, height=600, fullscreen=False)
+window = pyglet.window.Window(width=800, height=600, fullscreen=False, file_drops=True)
 keyboard = pyglet.window.key.KeyStateHandler()
 pyglet_resources = {}
 
 # Once this is False, the whole game shuts down
 running = True
-
-# A folder containing python-like scripts defining object templates
-object_templates_folder = "./templates/"
-object_templates = []
 
 # These are really server-specific animations. But consider them the "steve" of this game
 player_animation_names = {
@@ -30,23 +26,6 @@ player_animation_names = {
     "DOWN":  '10dd15ad708dd7306c01567897b8a16450c38038',
     "IDLE":  '871f349beeddf4f391b51bf03c4e139b4af442fb'
 }
-
-def load_all_templates():
-    for i in os.listdir(object_templates_folder):
-        opn = open(object_templates_folder + i, 'r')
-        contents = opn.read()
-        opn.close()
-        texture_name, setup_script, tick_script, metadata = contents.split("----")
-        texture_name = texture_name.strip()
-        setup_script = setup_script.strip()
-        tick_script = tick_script.strip()
-        metadata = metadata.strip()
-        object_templates.append({
-            "texture": texture_name,
-            "setup_script": base64.b64encode(setup_script.encode('utf8')).decode(),
-            "tick_script": base64.b64encode(tick_script.encode("utf8")).decode(),
-            "metadata": base64.b64encode(metadata.encode("utf8")).decode()
-        })
 
 def load_all_resources():
     for i in os.listdir(simplified_client.resource_folder):
@@ -74,12 +53,23 @@ def on_draw():
     glTranslatef(-3*simplified_client.player_node.x, -3*simplified_client.player_node.y, 0)
     glScalef(3.0, 3.0, 1)
     nodes_to_draw = list(simplified_client.nodes.values())
-    nodes_to_draw.sort(key=lambda x: x.z)
+    nodes_to_draw.sort(key=lambda x: x.z + 0.1 * x.y, reverse=True)
     for node in nodes_to_draw:
         pyglet_resources[node.texture_name].x = node.x
         pyglet_resources[node.texture_name].y = node.y
         pyglet_resources[node.texture_name].draw()
     glPopMatrix()
+
+@window.event
+def on_file_drop(x, y, paths):
+    for path in paths:
+        simplified_client.spawn_template_file(
+        path,
+        simplified_client.player_node.x + x/3 - window.width/6.0,
+        simplified_client.player_node.y + y/3 - window.height/6.0,
+        0
+    )
+    window.activate()
 
 @window.event
 def on_close():
@@ -130,9 +120,6 @@ def sync_nodes(_):
     simplified_client.download_nodes()
 
 if __name__ == "__main__":
-    # Load in our user created content
-    load_all_templates()
-
     # Connect to the server
     simplified_client.clientsocket.connect((sys.argv[1], int(sys.argv[2])))
 

@@ -24,12 +24,12 @@ nodes = {}
 total_nodes = 0 # total amount of nodes ever made
 
 class Node:
-    def __init__(self, x, y, z, texture, setup_script, tick_script, nid=None):
+    def __init__(self, x, y, z, texture, setup_script, tick_script, metadata, nid=None):
         global total_nodes
-        # In our simplified system there will only be image nodes
-        # at least for now
+        # "Texture" here is used somewhat liberally to mean "sha1sum of data we will send to client"
         self.x, self.y, self.z = x, y, z
         self.texture = texture
+        self.metadata = metadata
 
         # They will however have scripts for when they are created
         # and when they are ticked.
@@ -58,7 +58,8 @@ class Node:
 
     def serialize(self):
         return "{} {} {} {} {} {}".format(
-            self.node_id, self.x, self.y, self.z, self.texture
+            self.node_id, self.x, self.y, self.z, self.texture,
+            base64.b64encode(' '.join([str(i) for i in self.metadata]).encode("utf8")).decode()
         )
 
     def __str__(self):
@@ -132,16 +133,18 @@ def handle_user_command(client, addr, command):
     elif command.startswith("<NODE>"):
         c = command[len("<NODE>"):]
         # Chop up the packet
-        nid, x, y, z, text, b64a, b64b = c.split(" ")
+        nid, x, y, z, text, b64a, b64b, metadata = c.split(" ")
         x, y, z = float(x), float(y), float(z)
         nid = int(nid)
         nid = None if nid == -1 else nid # -1 flag for new node
 
         scripta = base64.b64decode(b64a).decode("utf8")
         scriptb = base64.b64decode(b64b).decode("utf8")
+        metadata = base64.b64decode(metadata).decode("utf8")
+        metadata = [float(i) for i in metadata.split(" ")]
 
         # Make it into a new node
-        new_node = Node(x, y, z, text, scripta, scriptb, nid=nid)
+        new_node = Node(x, y, z, text, scripta, scriptb, metadata, nid=nid)
 
         # Store that node in the nodes dictionary
         nodes[new_node.node_id] = new_node
