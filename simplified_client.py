@@ -70,6 +70,10 @@ def move_node(nid, x, y, z):
     n.x, n.y, n.z = x, y, z
     n.needs_upload = True
 
+def set_texture(nid, texture):
+    nodes[nid].texture_name = texture
+    send_packet("<ANIM>{} {}".format(nid, texture))
+
 def spawn_player():
     global player_node
     player_node = Node(

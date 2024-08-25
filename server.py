@@ -57,7 +57,7 @@ class Node:
                 exec(self.tick_script)
 
     def serialize(self):
-        return "{} {} {} {} {}".format(
+        return "{} {} {} {} {} {}".format(
             self.node_id, self.x, self.y, self.z, self.texture
         )
 
@@ -117,6 +117,16 @@ def handle_user_command(client, addr, command):
         n = nodes[i]
         n.x, n.y, n.z = x, y, z
         return
+
+    elif command.startswith("<ANIM>"):
+        # Parse the node information
+        c = command[len("<ANIM>"):]
+        i, res = c.split(" ")
+        i = int(i)
+        try:
+            nodes[i].texture = res
+        except KeyError as e:
+            pass
 
     # Recieve a specific node from the user
     elif command.startswith("<NODE>"):

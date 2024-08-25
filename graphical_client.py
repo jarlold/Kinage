@@ -1,18 +1,28 @@
 import sys
 import os
-import pyglet
-import simplified_client
-
-import magic
+import base64
+import threading
 
 import pyglet
 from pyglet.gl import *
+
+import magic
+
+import simplified_client
 
 # Pylget state variables
 window = pyglet.window.Window(width=800, height=600, fullscreen=False)
 keyboard = pyglet.window.key.KeyStateHandler()
 pyglet_resources = {}
 
+# Once this is False, the whole game shuts down
+running = True
+
+# A folder containing python-like scripts defining object templates
+object_templates_folder = "./templates/"
+object_templates = []
+
+# These are really server-specific animations. But consider them the "steve" of this game
 player_animation_names = {
     "LEFT":  '299fe3c4ef69bfb82122798bb9e0ad2ebd49222f',
     "RIGHT": '8e5a9c09b0ebd49ed80c27a8809db0816c7530c0',
@@ -20,6 +30,23 @@ player_animation_names = {
     "DOWN":  '10dd15ad708dd7306c01567897b8a16450c38038',
     "IDLE":  '871f349beeddf4f391b51bf03c4e139b4af442fb'
 }
+
+def load_all_templates():
+    for i in os.listdir(object_templates_folder):
+        opn = open(object_templates_folder + i, 'r')
+        contents = opn.read()
+        opn.close()
+        texture_name, setup_script, tick_script, metadata = contents.split("----")
+        texture_name = texture_name.strip()
+        setup_script = setup_script.strip()
+        tick_script = tick_script.strip()
+        metadata = metadata.strip()
+        object_templates.append({
+            "texture": texture_name,
+            "setup_script": base64.b64encode(setup_script.encode('utf8')).decode(),
+            "tick_script": base64.b64encode(tick_script.encode("utf8")).decode(),
+            "metadata": base64.b64encode(metadata.encode("utf8")).decode()
+        })
 
 def load_all_resources():
     for i in os.listdir(simplified_client.resource_folder):
@@ -54,6 +81,11 @@ def on_draw():
         pyglet_resources[node.texture_name].draw()
     glPopMatrix()
 
+@window.event
+def on_close():
+    global running
+    running = False
+
 def on_tick(dt):
     speed = dt * 40
     if keyboard[pyglet.window.key.W]:
@@ -82,11 +114,25 @@ def on_tick(dt):
     if keyboard[pyglet.window.key.SPACE]:
         print(simplified_client.nodes)
 
+def admin_console():
+    global running
+    while running:
+        print("")
+        a = input("> ")
+        print("")
+        try:
+            exec(a)
+        except Exception as e:
+            print(e)
+
 def sync_nodes(_):
     simplified_client.send_nodes()
     simplified_client.download_nodes()
 
 if __name__ == "__main__":
+    # Load in our user created content
+    load_all_templates()
+
     # Connect to the server
     simplified_client.clientsocket.connect((sys.argv[1], int(sys.argv[2])))
 
@@ -99,6 +145,10 @@ if __name__ == "__main__":
 
     # Then download the world
     simplified_client.download_nodes()
+
+    # Then we'll drop in an admin console for shits and giggles
+    admin_console_thread = threading.Thread(target=admin_console, args=()) 
+    admin_console_thread.start()
 
     # Now lets start setting up pyglet
     window.push_handlers(keyboard)
