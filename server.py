@@ -7,16 +7,14 @@ import socket
 
 import threading
 
-## CONFIG:
 ip = "127.0.0.1"
 port = 8763 + random.randint(0, 10)
 node_clock_speed = 1.0/10.0
 
-## RUNTIME:
-
 # Actual TCP socket that we will communicate with the clients on
 socket_server = socket.socket()
 client_threads = [] # Threads for the connected clients
+clients = []
 
 # This will hold filename -> base64encoded file contents
 resources = {}
@@ -24,7 +22,6 @@ resources = {}
 # This will hold all the game objects, called nodes
 nodes = {}
 total_nodes = 0 # total amount of nodes ever made
-
 
 class Node:
     def __init__(self, x, y, z, texture, setup_script, tick_script, nid=None):
@@ -60,7 +57,7 @@ class Node:
                 exec(self.tick_script)
 
     def serialize(self):
-        return "<NODE>{} {} {} {} {}".format(
+        return "{} {} {} {} {}".format(
             self.node_id, self.x, self.y, self.z, self.texture
         )
 
@@ -68,129 +65,6 @@ class Node:
         return "<NODE>\n\t{}\n\t{} {} {}\n\t{}\n\t{}\n</NODE".format(
             self.texture, self.x, self.y, self.z, self.setup_script, self.tick_script
         )
-
-
-# Load the resources into a big dictionary of base64 encoded gunk
-def load_resources(path):
-    files = os.listdir(path)
-    for f in files:
-        # Images only
-        if not f.split(".")[-1] in ["png", "gif", "jpg"]: continue
-        # Read the whole image
-        d = open(path+"/"+f, 'rb').read()
-        na = hashlib.sha256(d).hexdigest()
-        resources[na] = base64.b64encode(d)
-
-
-# See if resource is registered in the resources dictionary, if it
-# is, send the resource as Bas64 because fuck you
-# also try catch is faster here because python is fucked up and fuck
-# you fuck you fuck you
-def check_resource_exists(resource_name):
-    try:
-        a = resources[resource_name]
-        return True
-    except KeyError as e:
-        return False
-
-
-def handle_user_command(client, addr, command):
-    command = command.strip()
-    if command.startswith("<SEND_RESOURCES>"):
-        p = ""
-        for i in resources:
-            p += "<RESOURCE>" + resources[i].decode("utf8")
-            p += ' '
-        p += "\\"
-        client.send(p.encode())
-        return
-
-    elif command.startswith("<SEND_RESOURCE>"):
-        c = command[len("<SEND_RESOURCE>"):]
-        if check_resource_exists(c):
-            p = "<RESOURCE>"+resources[c].decode("utf8")+"\\"
-            client.send(p.encode())
-        else:
-            client.send("<ERROR>404\\".encode())
-        return
-            
-
-    elif command.startswith("<HEARTBEAT>"):
-        client.send("<HEARTBEAT>\\".encode())
-        return
-
-    # Just update a node's position
-    elif command.startswith("<TRAN>"):
-        c = command[len("<TRAN>"):]
-        i, x, y, z = c.split(" ")
-        i, x, y, z = int(i), float(x), float(y), float(z)
-        nodes[i].x = x
-        nodes[i].y = y
-        nodes[i].z = z
-
-    elif command.startswith("<NODE>"):
-        c = command[len("<NODE>"):]
-        # Chop up the packet
-        nid, x, y, z, text, b64a, b64b = c.split(" ")
-        x, y, z = float(x), float(y), float(z)
-        nid = int(nid)
-        nid = None if nid == -1 else nid # -1 flag for new node
-
-        if b64a == b"None":
-            scripta = None
-        else:
-            scripta = base64.b64decode(b64a).decode("utf8")
-
-        if b64b == b"None":
-            scriptb = None
-        else:
-            scriptb = base64.b64decode(b64b).decode("utf8")
-
-        # Make it into a new node
-        new_node = Node(x, y, z, text, scripta, scriptb, nid=nid)
-
-        # Store that node in the nodes dictionary
-        nodes[new_node.node_id] = new_node
-
-        # Send it back to the creator so he can update his own list
-        #client.send(("<NEW_NODE>{}\\".format(new_node.node_id)+"\\").encode())
-        client.send((new_node.serialize()+"\\").encode())
-        return
-
-    # SEND ALL THE NODES FUCK YOU FUCK YOU FUCK YOU
-    elif command.startswith("<SEND_NODES>"):
-        for nid in nodes:
-            client.send(nodes[nid].serialize().encode())
-        client.send("\\".encode())
-        return
-        
-
-# Mostly just say hi!
-def handle_socket_connection(client, addr):
-    # Let the client know what's up
-    #client.send("<HEARTBEAT>\\".encode())
-    while 1:
-        # String parsing? Slow? Never
-        packet = ""
-        while 1:
-            d = client.recv(1)
-            if d == b"\\":
-                break
-            elif d == b'\xff':
-                print(addr, "disconnected.")
-                return
-            else:
-                packet += d.decode("utf8")
-
-        # Print his crap
-        #print(packet)
-
-        # Then actually handle it I guess
-        try:
-            handle_user_command(client, addr, packet)
-        except Exception as e:
-            print(e)
-
 
 # Just call on_tick on every node every howeveroften
 def tick_nodes():
@@ -208,14 +82,117 @@ def tick_nodes():
         # Then update the starting time for the next dt
         start_time = time.time()
 
+# Load the resources into a big dictionary of base64 encoded gunk
+def load_resources(path):
+    files = os.listdir(path)
+    for f in files:
+        # Images only
+        if not f.split(".")[-1] in ["png", "gif", "jpg"]: continue
+        # Read the whole image
+        d = open(path+"/"+f, 'rb').read()
+        na = hashlib.sha1(d).hexdigest()
+        resources[na] = base64.b64encode(d)
+
+def send_to_client(client, packet):
+    client.send( (packet+"\\").encode() )
+
+def handle_user_command(client, addr, command):
+    command = command.strip()
+    # Send assets to the user
+    if command.startswith("<SEND_RESOURCES>"):
+        send_to_client(client, "<RESOURCES>")
+        for i in resources:
+            send_to_client(client, "{}".format(resources[i].decode("utf8")))
+        send_to_client(client, "</RESOURCES>")
+        return
+
+    # Just update a node's position
+    elif command.startswith("<MOVE>"):
+        # Parse the node information
+        c = command[len("<MOVE>"):]
+        i, x, y, z = c.split(" ")
+        i, x, y, z = int(i), float(x), float(y), float(z)
+
+        # Update the node
+        n = nodes[i]
+        n.x, n.y, n.z = x, y, z
+        return
+
+    # Recieve a specific node from the user
+    elif command.startswith("<NODE>"):
+        c = command[len("<NODE>"):]
+        # Chop up the packet
+        nid, x, y, z, text, b64a, b64b = c.split(" ")
+        x, y, z = float(x), float(y), float(z)
+        nid = int(nid)
+        nid = None if nid == -1 else nid # -1 flag for new node
+
+        scripta = base64.b64decode(b64a).decode("utf8")
+        scriptb = base64.b64decode(b64b).decode("utf8")
+
+        # Make it into a new node
+        new_node = Node(x, y, z, text, scripta, scriptb, nid=nid)
+
+        # Store that node in the nodes dictionary
+        nodes[new_node.node_id] = new_node
+
+        return
+
+    # SEND ALL THE NODES FUCK YOU FUCK YOU FUCK YOU
+    elif command.startswith("<SEND_NODES>"):
+        send_to_client(client, "<NODES>")
+        for nid in nodes:
+            send_to_client(client, nodes[nid].serialize())
+        send_to_client(client, "</NODES>")
+        return
+
+def handle_socket_connection(client, addr):
+    clients.append(client)
+    while 1:
+        # String parsing? Slow? Never
+        packet = ""
+        while 1:
+            d = client.recv(1)
+            if d == b"\\":
+                break
+            elif d == b'\xff':
+                print(addr, "disconnected.")
+                clients.remove(client)
+                return
+            else:
+                packet += d.decode("utf8")
+
+        # Print his crap
+        #print(packet)
+
+        # Then actually handle it I guess
+        try:
+            handle_user_command(client, addr, packet)
+        except Exception as e:
+            print(packet)
+            print(e)
+
+def handle_admin_commands():
+    while 1:
+        print("")
+        a = input("> ")
+        if not a.strip() == "":
+            try:
+                exec(a)
+            except Exception as e:
+                print(e)
+        print("")
 
 if __name__ == "__main__":
     # Load in the resources from the resources folder
     load_resources("./resources")
 
     # Then start going through the threads and updating them
-    tick_thread = threading.Thread(target=tick_nodes, args=())
-    tick_thread.start()
+    #tick_thread = threading.Thread(target=tick_nodes, args=())
+    #tick_thread.start()
+
+    admin_panel_thread = threading.Thread(target=handle_admin_commands, args=())
+    admin_panel_thread.start()
 
     # Bind the server to the port and let the admin know
     socket_server.bind((ip, port))
