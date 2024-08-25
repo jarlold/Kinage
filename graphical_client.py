@@ -13,6 +13,14 @@ window = pyglet.window.Window(width=800, height=600, fullscreen=False)
 keyboard = pyglet.window.key.KeyStateHandler()
 pyglet_resources = {}
 
+player_animation_names = {
+    "LEFT":  '299fe3c4ef69bfb82122798bb9e0ad2ebd49222f',
+    "RIGHT": '8e5a9c09b0ebd49ed80c27a8809db0816c7530c0',
+    "UP":    'c23a9c319fb4c54506e2a1cac1186a62090b4ec6',
+    "DOWN":  '10dd15ad708dd7306c01567897b8a16450c38038',
+    "IDLE":  '871f349beeddf4f391b51bf03c4e139b4af442fb'
+}
+
 def load_all_resources():
     for i in os.listdir(simplified_client.resource_folder):
         # Build the path
@@ -51,18 +59,28 @@ def on_tick(dt):
     if keyboard[pyglet.window.key.W]:
         simplified_client.player_node.y += speed
         simplified_client.player_node.needs_upload = True
-    if keyboard[pyglet.window.key.A]:
-        simplified_client.player_node.x -= speed
-        simplified_client.player_node.needs_upload = True
-    if keyboard[pyglet.window.key.S]:
+        simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["UP"])
+
+    elif keyboard[pyglet.window.key.S]:
         simplified_client.player_node.y -= speed
         simplified_client.player_node.needs_upload = True
-    if keyboard[pyglet.window.key.D]:
+        simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["DOWN"])
+
+    elif keyboard[pyglet.window.key.A]:
+        simplified_client.player_node.x -= speed
+        simplified_client.player_node.needs_upload = True
+        simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["LEFT"])
+
+    elif keyboard[pyglet.window.key.D]:
         simplified_client.player_node.x += speed
         simplified_client.player_node.needs_upload = True
+        simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["RIGHT"])
+    else:
+        simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["IDLE"])
+
+
     if keyboard[pyglet.window.key.SPACE]:
         print(simplified_client.nodes)
-        print(simplified_client.player_node.x)
 
 def sync_nodes(_):
     simplified_client.send_nodes()
