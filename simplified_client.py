@@ -42,15 +42,13 @@ def load_template(p):
     opn = open(p, 'r')
     contents = opn.read()
     opn.close()
-    texture_name, setup_script, tick_script, metadata = contents.split("----")
+    texture_name, setup_script, metadata = contents.split("----")
     texture_name = texture_name.strip()
     setup_script = setup_script.strip()
-    tick_script = tick_script.strip()
     metadata = metadata.strip()
     t = {
         "texture": texture_name,
         "setup_script": setup_script,
-        "tick_script": tick_script,
         "metadata": [float(i) for i in metadata.split(" ")]
     }
     return t
@@ -61,8 +59,7 @@ def spawn_template_file(p, x, y, z):
         x, y, z,
         f["texture"],
         f["metadata"],
-        setup_script=f["setup_script"],
-        tick_script=f["tick_script"]
+        setup_script=f["setup_script"]
     )
     print(n.serialize())
     send_packet(n.serialize())

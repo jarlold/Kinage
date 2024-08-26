@@ -24,7 +24,7 @@ nodes = {}
 total_nodes = 0 # total amount of nodes ever made
 
 class Node:
-    def __init__(self, x, y, z, texture, setup_script, tick_script, metadata, nid=None):
+    def __init__(self, x, y, z, texture, setup_script, metadata, nid=None):
         global total_nodes
         # "Texture" here is used somewhat liberally to mean "sha1sum of data we will send to client"
         self.x, self.y, self.z = x, y, z
@@ -34,7 +34,6 @@ class Node:
         # They will however have scripts for when they are created
         # and when they are ticked.
         self.setup_script = setup_script
-        self.tick_script = tick_script
 
         # Assign a unique node ID and then increment
         if nid is None:
@@ -47,14 +46,8 @@ class Node:
         # object is ticked, not when we create the object itself
         self.setup_script_has_run = False
 
-    def on_tick(self, dt):
-        if not self.setup_script_has_run:
-            if not self.setup_script is None:
-                exec(self.setup_script)
-            self.setup_script_has_run = True
-        else:
-            if not self.tick_script is None:
-                exec(self.tick_script)
+    def on_setup(self, dt):
+        exec(self.setup_script)
 
     def serialize(self):
         return "{} {} {} {} {} {}".format(
@@ -63,8 +56,8 @@ class Node:
         )
 
     def __str__(self):
-        return "<NODE>\n\t{}\n\t{} {} {}\n\t{}\n\t{}\n</NODE".format(
-            self.texture, self.x, self.y, self.z, self.setup_script, self.tick_script
+        return "<NODE>\n\t{}\n\t{} {} {}\n\t{}\n</NODE".format(
+            self.texture, self.x, self.y, self.z, self.setup_script
         )
 
 # Just call on_tick on every node every howeveroften
@@ -78,7 +71,12 @@ def tick_nodes():
         # Tick all the nodes with dt, we'll just do it in this thread
         # for now
         for nid in nodes:
-            nodes[nid].on_tick(time.time() - start_time)
+            if hasattr(nodes[nid], "on_setup") and not nodes[nid].setup_script_has_run:
+                nodes[nid].on_setup(node_clock_speed)
+                nodes[nid].setup_script_has_run = True
+
+            if hasattr(nodes[nid], "on_tick"):
+                nodes[nid].on_tick(nodes[nid], time.time() - start_time)
 
         # Then update the starting time for the next dt
         start_time = time.time()
@@ -148,18 +146,17 @@ def handle_user_command(client, addr, command):
     elif command.startswith("<NODE>"):
         c = command[len("<NODE>"):]
         # Chop up the packet
-        nid, x, y, z, text, b64a, b64b, metadata = c.split(" ")
+        nid, x, y, z, text, b64a, metadata = c.split(" ")
         x, y, z = float(x), float(y), float(z)
         nid = int(nid)
         nid = None if nid == -1 else nid # -1 flag for new node
 
         scripta = base64.b64decode(b64a).decode("utf8")
-        scriptb = base64.b64decode(b64b).decode("utf8")
         metadata = base64.b64decode(metadata).decode("utf8")
         metadata = [float(i) for i in metadata.split(" ")]
 
         # Make it into a new node
-        new_node = Node(x, y, z, text, scripta, scriptb, metadata, nid=nid)
+        new_node = Node(x, y, z, text, scripta, metadata, nid=nid)
 
         # Store that node in the nodes dictionary
         nodes[new_node.node_id] = new_node
