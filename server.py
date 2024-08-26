@@ -83,6 +83,10 @@ def tick_nodes():
         # Then update the starting time for the next dt
         start_time = time.time()
 
+def interact_node(nid, x, y):
+    if hasattr(nodes[nid], "on_interact"):
+        nodes[nid].on_interact(nodes[nid], x, y)
+
 # Load the resources into a big dictionary of base64 encoded gunk
 def load_resources(path):
     files = os.listdir(path)
@@ -106,6 +110,17 @@ def handle_user_command(client, addr, command):
             send_to_client(client, "{}".format(resources[i].decode("utf8")))
         send_to_client(client, "</RESOURCES>")
         return
+
+    # Allow the user to interact with a node
+    elif command.startswith("<INTERACT>"):
+        c = command[len("<INTERACT>"):]
+        nid, x, y = c.strip().split(" ")
+        nid = int(nid)
+        x, y = float(x), float(y)
+        try:
+            interact_node(nid, x, y)
+        except Exception as e:
+            print(e)
 
     # Just update a node's position
     elif command.startswith("<MOVE>"):
@@ -201,8 +216,8 @@ if __name__ == "__main__":
     load_resources("./resources")
 
     # Then start going through the threads and updating them
-    #tick_thread = threading.Thread(target=tick_nodes, args=())
-    #tick_thread.start()
+    tick_thread = threading.Thread(target=tick_nodes, args=())
+    tick_thread.start()
 
     admin_panel_thread = threading.Thread(target=handle_admin_commands, args=())
     admin_panel_thread.start()

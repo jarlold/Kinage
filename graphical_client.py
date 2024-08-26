@@ -76,6 +76,27 @@ def on_close():
     global running
     running = False
 
+@window.event
+def on_mouse_press(x, y, button, modifiers):
+    x = (x - window.width/2.0)/3.0
+    y = (y - window.height/2.0)/3.0
+    px = simplified_client.player_node.x
+    py = simplified_client.player_node.y
+
+    possible_nodes = []
+    for node in simplified_client.nodes.values():
+        res = pyglet_resources[node.texture_name]
+        w, h = res.width, res.height
+        if x+px > node.x and x+px < node.x + w and y+py > node.y and y+py < node.y + h:
+            possible_nodes.append(node)
+
+    if len(possible_nodes) <= 0:
+        return
+
+    possible_nodes.sort(key=lambda n: n.z)
+    winner = possible_nodes[-1]
+    simplified_client.interact_node(winner.node_id, winner.x, winner.y)
+
 def on_tick(dt):
     speed = dt * 40
     if keyboard[pyglet.window.key.W]:

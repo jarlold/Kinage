@@ -8,6 +8,7 @@ from client_node import Node
 # Holds all the game objects 
 nodes = {}
 player_node = None # Overwrite later
+menu_items = []
 
 # Holds all the game resources
 resource_folder = "/tmp/a_certain_temporary_folder/"
@@ -101,6 +102,9 @@ def move_node(nid, x, y, z):
     n = nodes[nid]
     n.x, n.y, n.z = x, y, z
     n.needs_upload = True
+
+def interact_node(nid, x, y):
+    send_packet("<INTERACT>{} {} {}".format(nid, x, y))
 
 def set_texture(nid, texture):
     nodes[nid].texture_name = texture
