@@ -7,8 +7,8 @@ import socket
 
 import threading
 
-ip = "127.0.0.1"
-port = 8763 + random.randint(0, 10)
+ip = "0.0.0.0"
+port = 8766 #+ random.randint(0, 10)
 node_clock_speed = 1.0/10.0
 
 # Actual TCP socket that we will communicate with the clients on
