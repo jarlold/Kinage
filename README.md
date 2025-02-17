@@ -1,7 +1,11 @@
 # Kinage
 *Kinage* stands for *Kinage Is Not A Game Engine*. This is an unfortunate name because Kinage is actually
-a really fucked up game engine.<br>
-I'll give you this strawberry if you keep it a secret okay? ;)
+a really fucked up game engine. Please don't tell anybody.<br>
+<p align="center">
+   <img src=readme_imgs/strawberry.gif><br>
+   I'll give you this strawberry if you keep it a secret okay? ;)
+</p>
+
 
 ## History
 This is actually the third iteration of an idea I had in highschool while very sick and drinking
