@@ -97,33 +97,43 @@ def on_mouse_press(x, y, button, modifiers):
     winner = possible_nodes[-1]
     simplified_client.interact_node(winner.node_id, winner.x, winner.y)
 
-def on_tick(dt):
-    speed = dt * 40
+def move_player(dt):
+        speed = dt*40
+        dx, dy = 0, 0
+
+        if keyboard[pyglet.window.key.W]:
+            dy += speed
+        elif keyboard[pyglet.window.key.S]:
+            dy -= speed
+        elif keyboard[pyglet.window.key.A]:
+            dx -= speed
+        elif keyboard[pyglet.window.key.D]:
+            dx += speed
+        else:
+            return
+
+        # Update the movement
+        simplified_client.player_node.x += dx
+        simplified_client.player_node.y += dy
+
+        # Gonna need to upload the player again.
+        simplified_client.player_node.needs_upload = True
+
+def update_player_animation():
     if keyboard[pyglet.window.key.W]:
-        simplified_client.player_node.y += speed
-        simplified_client.player_node.needs_upload = True
         simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["UP"])
-
     elif keyboard[pyglet.window.key.S]:
-        simplified_client.player_node.y -= speed
-        simplified_client.player_node.needs_upload = True
         simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["DOWN"])
-
     elif keyboard[pyglet.window.key.A]:
-        simplified_client.player_node.x -= speed
-        simplified_client.player_node.needs_upload = True
         simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["LEFT"])
-
     elif keyboard[pyglet.window.key.D]:
-        simplified_client.player_node.x += speed
-        simplified_client.player_node.needs_upload = True
         simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["RIGHT"])
     else:
         simplified_client.set_texture(simplified_client.player_node.node_id, player_animation_names["IDLE"])
 
-
-    if keyboard[pyglet.window.key.SPACE]:
-        print(simplified_client.nodes)
+def on_tick(dt):
+    move_player(dt)
+    update_player_animation()
 
 def admin_console():
     global running

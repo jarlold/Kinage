@@ -61,7 +61,6 @@ def spawn_template_file(p, x, y, z):
         f["metadata"],
         setup_script=f["setup_script"]
     )
-    print(n.serialize())
     send_packet(n.serialize())
     download_nodes()
 
@@ -77,16 +76,21 @@ def download_nodes():
     send_packet("<SEND_NODES>")
     packet = recv_packet()
     while (packet := recv_packet()) != "</NODES>":
-        nid, x, y, z, text, metadata = packet.split(" ")
+        nid, x, y, z, text, metadata, deleted = packet.split(" ")
         nid = int(nid)
+
         # Dont let other people overwrite our player controls!
         if not player_node is None and nid == player_node.node_id:
             continue
+
         metadata = base64.b64decode(metadata).decode("utf8")
         metadata = [float(i) for i in metadata.split(" ")]
         x, y, z = float(x), float(y), float(z)
         new_node = Node(x, y, z, text, metadata, nid=nid)
+        new_node.deleted = deleted == "1"
         nodes[nid] = new_node
+        if new_node.deleted:
+            del nodes[nid]
 
 def download_resources():
     send_packet("<SEND_RESOURCES>")
@@ -106,6 +110,9 @@ def interact_node(nid, x, y):
 def set_texture(nid, texture):
     nodes[nid].texture_name = texture
     send_packet("<ANIM>{} {}".format(nid, texture))
+
+def kill_nodes(nid):
+    send_packet("<KILL>{}</KILL>".format(nid))
 
 def spawn_player():
     global player_node

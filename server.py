@@ -31,6 +31,8 @@ class Node:
         self.texture = texture
         self.metadata = metadata
 
+        self.deleted_at = None
+
         # They will however have scripts for when they are created
         # and when they are ticked.
         self.setup_script = setup_script
@@ -50,9 +52,10 @@ class Node:
         exec(self.setup_script)
 
     def serialize(self):
-        return "{} {} {} {} {} {}".format(
+        return "{} {} {} {} {} {} {}".format(
             self.node_id, self.x, self.y, self.z, self.texture,
-            base64.b64encode(' '.join([str(i) for i in self.metadata]).encode("utf8")).decode()
+            base64.b64encode(' '.join([str(i) for i in self.metadata]).encode("utf8")).decode(),
+            0 if self.deleted_at is None else 1
         )
 
     def __str__(self):
@@ -60,10 +63,11 @@ class Node:
             self.texture, self.x, self.y, self.z, self.setup_script
         )
 
-# Just call on_tick on every node every howeveroften
+# Just call on_tick on every node every however often
 def tick_nodes():
     start_time = time.time()
     while 1:
+        deleted_nodes = []
         # Waste CPU cycles while we wait for the tick speed
         while time.time() - start_time < node_clock_speed:
             time.sleep(node_clock_speed/10.0)
@@ -71,12 +75,25 @@ def tick_nodes():
         # Tick all the nodes with dt, we'll just do it in this thread
         # for now
         for nid in nodes:
+            # If a node was marked as deleted then we don't have to do his script anymore
+            if not nodes[nid].deleted_at is None:
+                # and if he's been deleted for 20 seconds we don't have to tell people he's
+                # dead anymore
+                if abs(nodes[nid].deleted_at - start_time) > 20:
+                    deleted_nodes.append(nid)
+                continue
+
             if hasattr(nodes[nid], "on_setup") and not nodes[nid].setup_script_has_run:
                 nodes[nid].on_setup(node_clock_speed)
                 nodes[nid].setup_script_has_run = True
 
             if hasattr(nodes[nid], "on_tick"):
                 nodes[nid].on_tick(nodes[nid], time.time() - start_time)
+
+
+        # Now that we're done iterating we can delete the nodes marked as deleted
+        for nid in deleted_nodes:
+            del nodes[nid]
 
         # Then update the starting time for the next dt
         start_time = time.time()
@@ -108,6 +125,19 @@ def handle_user_command(client, addr, command):
             send_to_client(client, "{}".format(resources[i].decode("utf8")))
         send_to_client(client, "</RESOURCES>")
         return
+
+    # Allows any player to delete any node including other player's avatars
+    # whenever, for any reason.
+    elif command.startswith("<KILL>"):
+        print(nodes)
+        c = command[len("<KILL>"):]
+        nid = c.strip()
+        nid = int(nid)
+        try:
+            nodes[nid].deleted_at = time.time()
+            print("Nodes {} marked as deleted at {}".format(nid, nodes[nid].deleted_at))
+        except Exception as e:
+            print(e)
 
     # Allow the user to interact with a node
     elif command.startswith("<INTERACT>"):
